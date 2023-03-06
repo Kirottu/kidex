@@ -1,0 +1,2 @@
+[workspace]
+members = ["kidex", "kidex-common", "kidex-client"]
