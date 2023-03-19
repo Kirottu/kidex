@@ -1,19 +1,11 @@
-use std::{
-    collections::HashMap,
-    env,
-    fs::{self},
-    io,
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, env, fs, io, path::PathBuf, sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use globber::Pattern;
 use index::{GetPath, Index};
 use inotify::{EventMask, Inotify, WatchDescriptor};
 use kidex_common::{IndexEntry, IpcCommand, IpcResponse, DEFAULT_SOCKET};
-use serde::{Deserialize, Deserializer};
+use serde::{de::Error, Deserialize, Deserializer};
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook_tokio::Signals;
 use tokio::{
@@ -25,7 +17,6 @@ use tokio::{
     },
 };
 
-mod config;
 mod index;
 
 #[derive(Deserialize)]
@@ -35,15 +26,24 @@ pub struct Config {
     ignored: Vec<Pattern>,
 }
 
+/// Custom parser to handle the patterns
 fn parse_pattern_vec<'de, D>(deserializer: D) -> Result<Vec<Pattern>, D::Error>
 where
     D: Deserializer<'de>,
 {
     let vec = Vec::<String>::deserialize(deserializer)?;
-    Ok(vec
-        .into_iter()
-        .map(|string| Pattern::new(&string).expect("Failed to parse ignore pattern"))
-        .collect())
+    let mut final_vec = Vec::new();
+
+    for string in vec {
+        final_vec.push(match Pattern::new(&string) {
+            Ok(pattern) => pattern,
+            Err(why) => {
+                return Err(D::Error::custom(why));
+            }
+        });
+    }
+
+    Ok(final_vec)
 }
 
 /// Describes a directory that is watched for changes
@@ -88,9 +88,18 @@ enum EventLoopMsg {
 async fn main() {
     env_logger::init();
 
-    let config_path = "./config.ron";
+    let config_path = format!(
+        "{}/.config/kidex.ron",
+        match env::var("HOME") {
+            Ok(home) => home,
+            Err(why) => {
+                log::error!("Failed to determine home directory: {}", why);
+                return;
+            }
+        }
+    );
     let mut inotify = Inotify::init().expect("Failed to init inotify");
-    let mut config: Config = ron::from_str(&fs::read_to_string(config_path).unwrap()).unwrap();
+    let mut config: Config = ron::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
     let mut index = Index::new();
 
     index
@@ -134,11 +143,10 @@ async fn main() {
                 }
                 EventLoopMsg::Quit => break,
                 EventLoopMsg::Reload => {
-                    match serde_json::from_str::<config::Config>(
-                        &fs::read_to_string(config_path).unwrap(),
-                    ) {
+                    match serde_json::from_str::<Config>(&fs::read_to_string(&config_path).unwrap())
+                    {
                         Ok(new_config) => {
-                            config = new_config.into();
+                            config = new_config;
                             // Reindex everything if the config was reloaded
                             index
                                 .lock()
