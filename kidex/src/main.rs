@@ -292,9 +292,14 @@ async fn ipc_task(
                             None => Some(index
                                 .inner
                                 .iter()
-                                .flat_map(|(_, dir)| dir.children.iter().map(|(path, child)|
-                                    IndexEntry { path: path.clone(), directory: matches!(child, ChildIndex::Directory {..}) }
-                                ))
+                                .flat_map(|(desc, dir)| {
+                                    let parent_path = index.inner.get_path(desc);
+                                    dir.children.iter().map(move |(path, child)|
+                                        IndexEntry {
+                                            path: parent_path.clone().iter().chain(path.iter()).collect(),
+                                            directory: matches!(child, ChildIndex::Directory {..}),
+                                        })
+                                })
                                 .collect()
                             )
                         };
