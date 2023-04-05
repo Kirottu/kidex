@@ -29,7 +29,13 @@ impl GetPath for HashMap<WatchDescriptor, DirectoryIndex> {
         let mut paths = Vec::new();
 
         while let Some(new_desc) = desc {
-            let dir = self.get(new_desc).unwrap();
+            let dir = match self.get(new_desc) {
+                Some(dir) => dir,
+                None => {
+                    log::warn!("Unknown descriptor used for path!");
+                    break;
+                }
+            };
             paths.push(dir.path.as_path().as_os_str());
             desc = dir.parent.as_ref();
         }
