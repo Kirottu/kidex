@@ -4,6 +4,9 @@ A simple file indexing service
 
 ## Installation
 
+On Arch or Arch-based distros the AUR package [kidex-git](https://aur.archlinux.org/packages/kidex-git) can be installed.
+
+### Manual installation
 Simply run the following in the projects directory.
 
 ```sh
