@@ -2,6 +2,11 @@
 name = "kidex-common"
 version = "0.1.0"
 edition = "2021"
+description = "Helper library for interacting with Kidex"
+readme = "../README.md"
+homepage = "https://github.com/Kirottu/kidex"
+repository = "https://github.com/Kirottu/kidex"
+license = "GPL-3.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
