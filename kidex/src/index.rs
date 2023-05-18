@@ -90,16 +90,22 @@ impl Index {
             // If recursion is enabled, recurse through the directories
             if self.inner.get(&event.wd).unwrap().watch_dir.recurse {
                 log::info!("Directory created, adding watcher!");
-                let (child, index) = self
-                    .index_dir(
-                        inotify,
-                        self.inner.get(&event.wd).unwrap().watch_dir.clone(),
-                        path,
-                        Some(event.wd.clone()),
-                    )
-                    .unwrap();
-                self.inner.extend(index.into_iter());
-                child
+                match self.index_dir(
+                    inotify,
+                    self.inner.get(&event.wd).unwrap().watch_dir.clone(),
+                    path,
+                    Some(event.wd.clone()),
+                ) {
+                    Ok(Some((child, index))) => {
+                        self.inner.extend(index.into_iter());
+                        child
+                    }
+                    Ok(None) => return,
+                    Err(why) => {
+                        log::error!("Failed to index directory: {}", why);
+                        return;
+                    }
+                }
             } else {
                 ChildIndex::Directory { descriptor: None }
             }
@@ -187,7 +193,7 @@ impl Index {
         watch_dir: Arc<WatchDir>,
         path: &PathBuf,
         parent: Option<WatchDescriptor>,
-    ) -> io::Result<(ChildIndex, HashMap<WatchDescriptor, DirectoryIndex>)> {
+    ) -> io::Result<Option<(ChildIndex, HashMap<WatchDescriptor, DirectoryIndex>)>> {
         let full_path = match &parent {
             Some(parent) => {
                 let mut new_path = self.inner.get_path(parent);
@@ -196,6 +202,14 @@ impl Index {
             }
             None => path.clone(),
         };
+
+        if watch_dir
+            .ignored
+            .iter()
+            .any(|pat| pat.matches(&path.as_os_str().to_string_lossy()))
+        {
+            return Ok(None);
+        }
 
         let desc = inotify.add_watch(&full_path, self.mask)?;
 
@@ -290,12 +304,12 @@ impl Index {
             }
         }
 
-        Ok((
+        Ok(Some((
             ChildIndex::Directory {
                 descriptor: Some(desc),
             },
             index,
-        ))
+        )))
     }
 
     /// Completely clear and reindex everything
@@ -309,20 +323,19 @@ impl Index {
             let mut new_watch_dir = watch_dir.clone();
             new_watch_dir.ignored.extend(config.ignored.iter().cloned());
 
-            let (_, index) = match self.index_dir(
+            match self.index_dir(
                 inotify,
                 Arc::new(new_watch_dir),
                 &PathBuf::from(&watch_dir.path),
                 None,
             ) {
-                Ok(res) => res,
+                Ok(Some((_, index))) => self.inner.extend(index.into_iter()),
+                Ok(None) => (),
                 Err(why) => {
                     log::error!("Skipping WatchDir {} due to error: {}", watch_dir.path, why);
                     continue;
                 }
-            };
-
-            self.inner.extend(index.into_iter());
+            }
         }
 
         log::info!("Full index done!");
