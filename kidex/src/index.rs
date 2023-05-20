@@ -206,7 +206,7 @@ impl Index {
         if watch_dir
             .ignored
             .iter()
-            .any(|pat| pat.matches(&path.as_os_str().to_string_lossy()))
+            .any(|pat| pat.matches(&path.to_string_lossy()))
         {
             return Ok(None);
         }
@@ -232,75 +232,81 @@ impl Index {
         while !queue.is_empty() {
             let (entry, desc) = queue.pop().unwrap();
             let path = entry.path().file_name().map(PathBuf::from).unwrap();
-            let full_path = index
-                .get_path(&desc)
-                .iter()
-                .chain(path.iter())
-                .collect::<PathBuf>();
-            let file_type = match entry.file_type() {
-                Ok(file_type) => file_type,
-                Err(why) => {
-                    log::error!("Failed to determine file type, skipping: {}", why);
-                    continue;
-                }
-            };
 
-            if file_type.is_dir()
-                && watch_dir.recurse
-                && !watch_dir
-                    .ignored
-                    .iter()
-                    .any(|pat| pat.matches(&full_path.to_string_lossy()))
+            // Ignore files specified with ignore patterns
+            if !watch_dir
+                .ignored
+                .iter()
+                .any(|pat| pat.matches(&path.to_string_lossy()))
             {
-                let new_desc = match inotify.add_watch(&full_path, self.mask) {
-                    Ok(new_desc) => {
-                        log::trace!("Indexed subdirectory {}", full_path.display());
-                        match fs::read_dir(&full_path) {
-                            Ok(entries) => {
-                                queue.extend(entries.filter_map(|res| {
-                                    res.ok().map(|entry| (entry, new_desc.clone()))
-                                }))
-                            }
-                            Err(why) => {
-                                log::error!("Failed to read directory entries, skipping: {}", why);
-                                continue;
-                            }
-                        }
-                        index.insert(
-                            new_desc.clone(),
-                            DirectoryIndex {
-                                path: path.clone(),
-                                children: HashMap::new(),
-                                watch_dir: watch_dir.clone(),
-                                parent: Some(desc.clone()),
-                            },
-                        );
-                        Some(new_desc)
-                    }
+                let full_path = index
+                    .get_path(&desc)
+                    .iter()
+                    .chain(path.iter())
+                    .collect::<PathBuf>();
+                let file_type = match entry.file_type() {
+                    Ok(file_type) => file_type,
                     Err(why) => {
-                        log::error!("Failed to create listener for directory, skipping: {}", why);
-                        None
+                        log::error!("Failed to determine file type, skipping: {}", why);
+                        continue;
                     }
                 };
 
-                index.get_mut(&desc).unwrap().children.insert(
-                    path.clone(),
-                    ChildIndex::Directory {
-                        descriptor: new_desc,
-                    },
-                );
-            } else if file_type.is_dir() {
-                index
-                    .get_mut(&desc)
-                    .unwrap()
-                    .children
-                    .insert(path, ChildIndex::Directory { descriptor: None });
-            } else if file_type.is_file() {
-                index
-                    .get_mut(&desc)
-                    .unwrap()
-                    .children
-                    .insert(path, ChildIndex::File {});
+                if file_type.is_dir() && watch_dir.recurse {
+                    let new_desc = match inotify.add_watch(&full_path, self.mask) {
+                        Ok(new_desc) => {
+                            log::trace!("Indexed subdirectory {}", full_path.display());
+                            match fs::read_dir(&full_path) {
+                                Ok(entries) => queue.extend(entries.filter_map(|res| {
+                                    res.ok().map(|entry| (entry, new_desc.clone()))
+                                })),
+                                Err(why) => {
+                                    log::error!(
+                                        "Failed to read directory entries, skipping: {}",
+                                        why
+                                    );
+                                    continue;
+                                }
+                            }
+                            index.insert(
+                                new_desc.clone(),
+                                DirectoryIndex {
+                                    path: path.clone(),
+                                    children: HashMap::new(),
+                                    watch_dir: watch_dir.clone(),
+                                    parent: Some(desc.clone()),
+                                },
+                            );
+                            Some(new_desc)
+                        }
+                        Err(why) => {
+                            log::error!(
+                                "Failed to create listener for directory, skipping: {}",
+                                why
+                            );
+                            None
+                        }
+                    };
+
+                    index.get_mut(&desc).unwrap().children.insert(
+                        path.clone(),
+                        ChildIndex::Directory {
+                            descriptor: new_desc,
+                        },
+                    );
+                } else if file_type.is_dir() {
+                    index
+                        .get_mut(&desc)
+                        .unwrap()
+                        .children
+                        .insert(path, ChildIndex::Directory { descriptor: None });
+                } else if file_type.is_file() {
+                    index
+                        .get_mut(&desc)
+                        .unwrap()
+                        .children
+                        .insert(path, ChildIndex::File {});
+                }
             }
         }
 
