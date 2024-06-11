@@ -16,6 +16,7 @@ use tokio::{
         Mutex,
     },
 };
+use std::path;
 
 mod index;
 
@@ -46,11 +47,23 @@ where
     Ok(final_vec)
 }
 
+fn deserialize_path<'de, D>(deserializer: D) -> Result<path::PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    #[cfg(not(windows))]
+    return expanduser::expanduser(&s).map_err(serde::de::Error::custom);
+    #[cfg(windows)]
+    return Ok(s.into());
+}
+
 /// Describes a directory that is watched for changes
 #[derive(Clone, Debug, Deserialize)]
 pub struct WatchDir {
     /// Path of the directory
-    path: String,
+    #[serde(deserialize_with = "deserialize_path")]
+    path: PathBuf,
     /// Ignored patterns
     #[serde(deserialize_with = "parse_pattern_vec")]
     ignored: Vec<Pattern>,

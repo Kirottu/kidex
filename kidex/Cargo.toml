@@ -19,3 +19,4 @@ signal-hook-tokio = { version = "0.3.1", features = ["futures-v0_3"] }
 futures = "0.3.26"
 anyhow = "1.0.69"
 globber = "0.1.3"
+expanduser = "1.2.2"
