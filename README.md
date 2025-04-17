@@ -6,7 +6,58 @@ A simple file indexing service
 
 On Arch or Arch-based distros the AUR package [kidex-git](https://aur.archlinux.org/packages/kidex-git) can be installed.
 
+On nixos:
+
+1. You'll need to add this repo into your flake.nix
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    kidex.url = "github:ReStranger/kidex?ref=nix";
+  };
+
+  outputs = {
+    self,
+    nixpkgs,
+    kidex,
+    ...
+  }: {
+    ...
+  };
+}
+```
+
+2. After that, add package into your environment.systemPackages or home.packages:
+
+```nix
+# Nixos configuraion
+{
+  pkgs,
+  inputs,
+  ...
+}: {
+  environment.systemPackages = with pkgs; [
+    inputs.kidex.packages.${pkgs.system}.default
+  ];
+}
+```
+
+```nix
+# Home-manager configuration
+{
+  pkgs,
+  inputs,
+  ...
+}: {
+  home.packages = with pkgs; [
+    inputs.kidex.packages.${pkgs.system}.default
+  ];
+}
+```
+
 ### Manual installation
+
 Simply run the following in the projects directory.
 
 ```sh
@@ -16,6 +67,7 @@ cargo install --path .
 ## Configuration
 
 Kidex only has a single config file to be placed in `~/.config/kidex.ron`, which uses the following structure:
+
 ```ron
 Config(
   ignored: [], // A list of patterns to be ignored in all directories
