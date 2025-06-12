@@ -34,6 +34,7 @@
             default = pkgs.mkShell {
               inputsFrom = builtins.attrValues self'.packages;
               packages = with pkgs; [
+                rust-analyzer
                 rustc
                 gcc
                 gdb
