@@ -283,7 +283,7 @@ async fn ipc_task(
                                 index
                                     .inner
                                     .iter()
-                                    .find(|(_, dir)| dir.path == path)
+                                    .find(|(desc, _)| index.inner.get_path(&desc) == path) 
                                     .map(|(desc, _)| index.traverse(desc.clone())
                                         .into_iter()
                                         .flat_map(|(desc, dir)| {
