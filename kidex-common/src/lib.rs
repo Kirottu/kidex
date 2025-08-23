@@ -25,6 +25,14 @@ pub struct IndexEntry {
     pub directory: bool,
 }
 
+pub mod helper {
+    use std::path::{Path, PathBuf};
+    pub fn merge_paths(path1: &Path, path2: &Path) -> PathBuf {
+        return path1.iter().chain(path2.iter()).collect()
+    }
+}
+
+
 #[cfg(feature = "util")]
 pub mod util {
     use std::{
