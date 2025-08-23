@@ -10,6 +10,7 @@ pub enum IpcCommand {
     Quit,
     Reload,
     GetIndex(Option<PathBuf>),
+    QueryIndex(String),
 }
 
 #[derive(Deserialize, Serialize)]
@@ -81,7 +82,6 @@ pub mod util {
     fn fetch(command: &IpcCommand) -> Result<IpcResponse, Error> {
         let mut stream =
             UnixStream::connect(env::var("SOCKET_PATH").unwrap_or(DEFAULT_SOCKET.to_string()))?;
-
         let mut buf = serde_json::to_vec(command).unwrap();
         buf.push(0x0);
 
@@ -91,7 +91,16 @@ pub mod util {
 
         stream.read_to_end(&mut buf)?;
 
+        println!("Rec: {}", String::from_utf8_lossy(&buf));
+
         Ok(serde_json::from_slice(&buf)?)
+    }
+
+    pub fn query_index(query_string: &str) -> Result<Vec<IndexEntry>, Error> {
+        match fetch(&IpcCommand::QueryIndex(query_string.to_string()))? {
+            IpcResponse::Index(index) => Ok(index),
+            _ => Err(Error::Unknown),
+        }
     }
 
     pub fn get_index(path: Option<PathBuf>) -> Result<Vec<IndexEntry>, Error> {
