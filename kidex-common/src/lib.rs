@@ -91,8 +91,6 @@ pub mod util {
 
         stream.read_to_end(&mut buf)?;
 
-        println!("Rec: {}", String::from_utf8_lossy(&buf));
-
         Ok(serde_json::from_slice(&buf)?)
     }
 

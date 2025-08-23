@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use kidex_common::util::{get_index, query_index, regenerate_index, reload_config, shutdown_server};
+use kidex_common::{util::{get_index, query_index, regenerate_index, reload_config, shutdown_server}, IndexEntry};
 
 #[derive(Parser)]
 struct Opts {
@@ -15,6 +15,7 @@ enum Command {
     ReloadConfig,
     RegenerateIndex,
     GetIndex { path: Option<PathBuf> },
+    Query { str: String },
     Find { str: String },
 }
 
@@ -37,6 +38,56 @@ where E: std::error::Error
         }
     }
 }
+
+trait ToSaneString {
+    fn to_string_safe(&self) -> &str;
+}
+
+impl ToSaneString for std::ffi::OsStr {
+    fn to_string_safe(&self) -> &str {
+        &self.to_str().expect("Path with invalid unicode found")
+    }
+}
+impl ToSaneString for std::path::Path {
+    fn to_string_safe(&self) -> &str {
+        &self.to_str().expect("Path with invalid unicode found")
+    }
+}
+
+fn calc_score(query: &str, entry: &IndexEntry) -> i64 {
+    let path = entry.path.parent().map_or("", |pb| pb.to_string_safe());
+    let basename  = entry.path.file_name().map_or("", |pb| pb.to_string_safe());
+    let mut score: i64 = -1;
+    if basename.contains(query) { 
+        score += 100 * query.len() as i64;
+    }
+    // Check if it's in the path
+    let mut backdepth = 21;
+    for p in entry.path.components().rev() {
+        if p.as_os_str()
+            .to_string_safe()
+            .contains(query)
+        {
+            score+=backdepth;
+        }
+        backdepth -= 3;
+    }
+    return score;
+}
+
+// Frontend searching. Searches the received index
+pub fn filter(index: Vec<IndexEntry>, query_string: &str) -> Vec<IndexEntry> {
+    let mut filtered: Vec<(i64,IndexEntry)> = index
+        .into_iter()
+        .filter_map(|entry| {
+            let score = calc_score(query_string, &entry);
+            if score > 0 { Some((score, entry)) } else { None }
+        })
+        .collect();
+    filtered.sort_by_key(|(s, _)| *s);
+    filtered.into_iter().map(|p| p.1).collect()
+}
+
 
 fn main() {
     let opts = Opts::parse();
@@ -61,11 +112,19 @@ fn main() {
                 serde_json::to_string_pretty(&index).exit_on_err("Failed to serialize data")
             );
         }
-        Command::Find { str } => {
+        Command::Query { str } => {
             let index = query_index(&str).exit_on_err("Failed to get index");
             println!(
                 "{}",
                 serde_json::to_string_pretty(&index).exit_on_err("Failed to serialize data")
+            );
+        }
+        Command::Find { str } => {
+            let index = get_index(None).exit_on_err("Failed to get index");
+            let filtered = filter(index, &str);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&filtered).exit_on_err("Failed to serialize data")
             );
         }
     }
