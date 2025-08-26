@@ -332,13 +332,13 @@ impl Index {
             match self.index_dir(
                 inotify,
                 Arc::new(new_watch_dir),
-                &PathBuf::from(&watch_dir.path),
+                &watch_dir.path,
                 None,
             ) {
                 Ok(Some((_, index))) => self.inner.extend(index.into_iter()),
                 Ok(None) => (),
                 Err(why) => {
-                    log::error!("Skipping WatchDir {} due to error: {}", watch_dir.path, why);
+                    log::error!("Skipping WatchDir {:?} due to error: {}", watch_dir.path, why);
                     continue;
                 }
             }
