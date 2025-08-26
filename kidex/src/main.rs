@@ -16,7 +16,6 @@ use tokio::{
         Mutex,
     },
 };
-use std::path;
 
 mod index;
 
@@ -47,15 +46,12 @@ where
     Ok(final_vec)
 }
 
-fn deserialize_path<'de, D>(deserializer: D) -> Result<path::PathBuf, D::Error>
+fn deserialize_path<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
 where
     D: Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
-    #[cfg(not(windows))]
     return expanduser::expanduser(&s).map_err(serde::de::Error::custom);
-    #[cfg(windows)]
-    return Ok(s.into());
 }
 
 /// Describes a directory that is watched for changes
