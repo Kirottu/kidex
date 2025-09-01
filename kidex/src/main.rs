@@ -321,9 +321,9 @@ async fn ipc_task(
 
                         stream.write_all(&buf).await.unwrap();
                     }
-                    IpcCommand::QueryIndex(str) => {
+                    IpcCommand::QueryIndex(query) => {
                         let index = index.lock().await;
-                        let results = query::query(&index, &str);
+                        let results = query::query(&index, &query);
 
                         let buf = serde_json::to_vec(&IpcResponse::Index(results)).unwrap();
 

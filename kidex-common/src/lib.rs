@@ -10,7 +10,7 @@ pub enum IpcCommand {
     Quit,
     Reload,
     GetIndex(Option<PathBuf>),
-    QueryIndex(String),
+    QueryIndex(QueryOptions),
 }
 
 #[derive(Deserialize, Serialize)]
@@ -26,13 +26,53 @@ pub struct IndexEntry {
     pub directory: bool,
 }
 
-pub mod helper {
-    use std::path::{Path, PathBuf};
-    pub fn merge_paths(path1: &Path, path2: &Path) -> PathBuf {
-        return path1.iter().chain(path2.iter()).collect()
+#[derive(Deserialize, Serialize, Clone)]
+pub enum OutputFormat {
+    Json,
+    List,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub enum TypeFilter {
+    All,
+    FilesOnly,
+    DirOnly,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub struct QueryOptions {
+    pub query_string: String,
+    pub output_format: OutputFormat,
+    pub type_filter: TypeFilter,
+    pub root_path: Option<PathBuf>,
+}
+
+impl Default for QueryOptions {
+    fn default() -> Self {
+        QueryOptions {
+            query_string: "".to_string(),
+            output_format: OutputFormat::Json,
+            type_filter: TypeFilter::All,
+            root_path: None,
+        }
     }
 }
 
+impl QueryOptions {
+    pub fn from_str(s: &str) -> Self {
+        QueryOptions {
+            query_string: s.to_string(),
+            ..Default::default()
+        }
+    }
+}
+
+pub mod helper {
+    use std::path::{Path, PathBuf};
+    pub fn merge_paths(path1: &Path, path2: &Path) -> PathBuf {
+        return path1.iter().chain(path2.iter()).collect();
+    }
+}
 
 #[cfg(feature = "util")]
 pub mod util {
@@ -43,6 +83,8 @@ pub mod util {
         os::unix::net::UnixStream,
         path::PathBuf,
     };
+
+    use crate::QueryOptions;
 
     use super::{IndexEntry, IpcCommand, IpcResponse, DEFAULT_SOCKET};
 
@@ -94,8 +136,8 @@ pub mod util {
         Ok(serde_json::from_slice(&buf)?)
     }
 
-    pub fn query_index(query_string: &str) -> Result<Vec<IndexEntry>, Error> {
-        match fetch(&IpcCommand::QueryIndex(query_string.to_string()))? {
+    pub fn query_index(query_opts: QueryOptions) -> Result<Vec<IndexEntry>, Error> {
+        match fetch(&IpcCommand::QueryIndex(query_opts))? {
             IpcResponse::Index(index) => Ok(index),
             _ => Err(Error::Unknown),
         }
