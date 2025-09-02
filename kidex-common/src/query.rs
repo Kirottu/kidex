@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
-use crate::IndexEntry;
-
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum OutputFormat {
     Json,
@@ -52,6 +50,7 @@ pub struct QueryOptions {
     pub query: Query,
     pub output_format: OutputFormat,
     pub root_path: Option<PathBuf>,
+    pub limit: Option<usize>,
 }
 
 impl Default for Query {
@@ -70,6 +69,7 @@ impl Default for QueryOptions {
             output_format: OutputFormat::Json,
             root_path: None,
             query: Query::default(),
+            limit: None,
         }
     }
 }
