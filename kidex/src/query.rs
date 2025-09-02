@@ -1,13 +1,13 @@
 use std::path::Path;
 
-use kidex_common::{helper::merge_paths, IndexEntry, QueryOptions};
+use kidex_common::{helper::merge_paths, IndexEntry, query::QueryOptions};
 use crate::{index::{GetPath, Index}, ChildIndex};
 
 
 fn calc_score(query: &str, candidate: &Path) -> i32 {
     let mut score: i32 = -1;
     let basename = candidate.file_name().unwrap_or_default().to_string_lossy();
-    let path = candidate.to_string_lossy();
+    let _path = candidate.to_string_lossy();
 
     if basename.starts_with(query) {
         score += 50 * query.len() as i32
@@ -43,10 +43,11 @@ pub fn query(index: &Index, opts: &QueryOptions) -> Vec<IndexEntry> {
             dir.children.iter().filter_map(move |(path, child)| {
                 let full_path = merge_paths(&parent_path, path);
                 // Algorithm
-                let score = calc_score(
-                    &opts.query_string.to_lowercase(),
-                    &full_path
-                );
+                // let score = calc_score(
+                //     &opts.query,
+                //     &full_path
+                // );
+                let score = 0;
                 if score >= 0 {
                     Some(
                         (score,

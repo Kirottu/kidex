@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
+use query::QueryOptions;
 use serde::{Deserialize, Serialize};
+
+pub mod query;
 
 pub const DEFAULT_SOCKET: &str = "/tmp/kidex.sock";
 
@@ -26,47 +29,6 @@ pub struct IndexEntry {
     pub directory: bool,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
-pub enum OutputFormat {
-    Json,
-    List,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-pub enum TypeFilter {
-    All,
-    FilesOnly,
-    DirOnly,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-pub struct QueryOptions {
-    pub query_string: String,
-    pub output_format: OutputFormat,
-    pub type_filter: TypeFilter,
-    pub root_path: Option<PathBuf>,
-}
-
-impl Default for QueryOptions {
-    fn default() -> Self {
-        QueryOptions {
-            query_string: "".to_string(),
-            output_format: OutputFormat::Json,
-            type_filter: TypeFilter::All,
-            root_path: None,
-        }
-    }
-}
-
-impl QueryOptions {
-    pub fn from_str(s: &str) -> Self {
-        QueryOptions {
-            query_string: s.to_string(),
-            ..Default::default()
-        }
-    }
-}
-
 pub mod helper {
     use std::path::{Path, PathBuf};
     pub fn merge_paths(path1: &Path, path2: &Path) -> PathBuf {
@@ -84,7 +46,7 @@ pub mod util {
         path::PathBuf,
     };
 
-    use crate::QueryOptions;
+    use crate::query::QueryOptions;
 
     use super::{IndexEntry, IpcCommand, IpcResponse, DEFAULT_SOCKET};
 
