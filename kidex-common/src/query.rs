@@ -83,38 +83,45 @@ impl Query {
         let mut query = Query::default();
         for arg in args {
             let arg = arg.as_ref();
+            let keyword = Keyword::new(arg, arg.ends_with("/"));
+
             if arg == "/" {
                 query.file_type = FileType::DirOnly;
-            } else if arg == "f/" {
+            }
+            else if arg == "f/" {
                 query.file_type = FileType::FilesOnly;
-            } else if arg.starts_with("//") {
-                query.direct_parent = Some(Keyword::new(arg, arg.ends_with("/")));
-            } else if arg.starts_with("/") {
-                query.path_keywords.push(Keyword::new(arg, arg.ends_with("/")));
-            } else {
-                query.keywords.push(Keyword::new(arg, arg.ends_with("/")));
+            }
+            else if arg.starts_with("//") {
+                query.direct_parent = Some(keyword);
+            }
+            else if arg.starts_with("/") {
+                query.path_keywords.push(keyword);
+            }
+            else {
+                query.keywords.push(keyword);
             }
         }
         
-        log::info!("{:?}", query);
+        log::error!("{:?}", query);
+        println!("{:?}", query);
         query
     }
 }
 
-pub fn calc_score(query: &Query, entry: &IndexEntry) -> i64 {
-    let basename  = entry.path.file_name().unwrap_or_default().to_string_lossy();
+pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
+    let basename  = path.file_name().unwrap_or_default().to_string_lossy();
     let mut score: i64 = 0;
 
     // Return immediately when filetype mismatches
     match query.file_type {
-        FileType::FilesOnly if entry.directory => return -8888,
-        FileType::DirOnly if ! entry.directory => return -8888,
+        FileType::FilesOnly if is_dir => return -8888,
+        FileType::DirOnly if ! is_dir => return -8888,
         _ => (),
     };
 
     // When set, check if the direct parent of the file matches
     if let Some(parent_dir) = &query.direct_parent {
-        let parent_path_name = entry.path
+        let parent_path_name = path
             .parent()
             .and_then(|p| p.file_name())
             .and_then(|p| p.to_str())
@@ -122,7 +129,7 @@ pub fn calc_score(query: &Query, entry: &IndexEntry) -> i64 {
         if parent_dir.is_in(parent_path_name) {
             score += 1;
         } else {
-            return 9999;
+            return -9999;
         }
     }
 
@@ -142,7 +149,7 @@ pub fn calc_score(query: &Query, entry: &IndexEntry) -> i64 {
         // Check if it's in the path
         let mut in_path = false;
         let mut backdepth = 20;
-        for dc in entry.path.components().rev() {
+        for dc in path.components().rev().skip(1) {
             let dir_component = dc.as_os_str().to_string_lossy();
             if pkw.is_in(&dir_component) {
                 in_path = true;

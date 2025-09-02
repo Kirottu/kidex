@@ -15,8 +15,15 @@ enum Command {
     ReloadConfig,
     RegenerateIndex,
     GetIndex { path: Option<PathBuf> },
-    Query { str: String },
-    Find { args: Vec<String> },
+    Query { args: Vec<String> },
+    Find {
+        // TODO: Add some CLI arguments:
+        // --limit <amount>
+        // --root <path>
+        // --filetype (dir|file)
+        // --mode <mode> | --regex | --literal | --smart (default)
+        args: Vec<String>
+    },
 }
 
 
@@ -39,27 +46,12 @@ where E: std::error::Error
     }
 }
 
-trait ToSaneString {
-    fn to_string_safe(&self) -> &str;
-}
-
-impl ToSaneString for std::ffi::OsStr {
-    fn to_string_safe(&self) -> &str {
-        &self.to_str().expect("Path with invalid unicode found")
-    }
-}
-impl ToSaneString for std::path::Path {
-    fn to_string_safe(&self) -> &str {
-        &self.to_str().expect("Path with invalid unicode found")
-    }
-}
-
 // Frontend searching. Searches the received index
 pub fn filter(index: Vec<IndexEntry>, query_opts: &QueryOptions) -> Vec<IndexEntry> {
     let mut filtered: Vec<(i64,IndexEntry)> = index
         .into_iter()
         .filter_map(|entry| {
-            let score = calc_score(&query_opts.query, &entry);
+            let score = calc_score(&query_opts.query, &entry.path, entry.directory);
             if score > 0 { Some((score, entry)) } else { None }
         })
         .collect();
@@ -91,16 +83,21 @@ fn main() {
                 serde_json::to_string_pretty(&index).exit_on_err("Failed to serialize data")
             );
         }
-        Command::Query { str } => {
-            let index = query_index(QueryOptions::default()).exit_on_err("Failed to get index");
+        Command::Query { args } => {
+            let query = Query::from_query_elements(args);
+            let opts = QueryOptions { query, ..Default::default()};
+
+            let index = query_index(opts).exit_on_err("Failed to query index");
             println!(
                 "{}",
                 serde_json::to_string_pretty(&index).exit_on_err("Failed to serialize data")
             );
         }
         Command::Find { args } => {
+            let query = Query::from_query_elements(args);
+            let opts = QueryOptions { query, ..Default::default()};
+
             let index = get_index(None).exit_on_err("Failed to get index");
-            let opts = QueryOptions { query: Query::from_query_elements(args), ..Default::default()};
             let filtered = filter(index, &opts);
             println!(
                 "{}",
