@@ -83,15 +83,6 @@ pub struct Query {
     pub path_keywords: Vec<Keyword>,
     pub case_option: CaseOption,
 }
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct QueryOptions {
-    pub query: Query,
-    pub output_format: OutputFormat,
-    pub root_path: Option<PathBuf>,
-    pub limit: Option<usize>,
-}
-
 impl Default for Query {
     fn default() -> Self {
         Query {
@@ -103,23 +94,26 @@ impl Default for Query {
         }
     }
 }
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct QueryOptions {
+    pub query: Query,
+    pub output_format: OutputFormat,
+    pub root_path: Option<PathBuf>,
+    pub limit: Option<usize>,
+}
 impl Default for QueryOptions {
     fn default() -> Self {
         QueryOptions {
+            query: Query::default(),
             output_format: OutputFormat::Json,
             root_path: None,
-            query: Query::default(),
             limit: None,
         }
     }
 }
 
 impl Query {
-    // Basically a split-by-whitespace
-    pub fn from_query_string(s: &str) -> Self {
-        Query::from_query_elements(s.split_whitespace().collect())
-    }
-
     /// Parses the arguments to refine the query.
     /// This includes the special syntax to search only directorys or only files,\
     /// and if a keyword should be matched against the basename or the path.
@@ -149,12 +143,12 @@ impl Query {
     }
 }
 
-/// Applies a Query to a single item to calculate a score.
+/// Applies a Query to a path candidate to calculate a score.
 pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
     let basename  = path.file_name().unwrap_or_default().to_string_lossy();
     let mut score: i64 = 0;
 
-    // Return immediately when filetype mismatches
+    // Eliminate when filetype mismatches
     match query.file_type {
         FileType::FilesOnly if is_dir => return -8888,
         FileType::DirOnly if ! is_dir => return -8888,
@@ -171,6 +165,7 @@ pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
         if parent_dir.is_in(parent_path_name, &query.case_option) {
             score += 1;
         } else {
+            // Eliminate if parent directory does not match
             return -9999;
         }
     }
@@ -182,15 +177,17 @@ pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
         } else if kw.is_in(&basename, &query.case_option) {
             10
         } else {
-            -2000
+            // Eliminate if a keyword misses in the basename
+            return -2222
         }
     }
 
     // Check if all the path keywords match any of the path components
     for pkw in &query.path_keywords {
-        // Check if it's in the path
         let mut in_path = false;
         let mut backdepth = 20;
+        // Check if a path keyword matches any of the path components
+        // Deeper directories give greater score
         for dc in path.components().rev().skip(1) {
             let dir_component = dc.as_os_str().to_string_lossy();
             if pkw.is_in(&dir_component, &query.case_option) {
@@ -199,9 +196,8 @@ pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
             }
             backdepth -= 4;
         }
-        // Penalty if a path_keyword is not in the path at all
-        if ! in_path { score -= 5000 }
-
+        // Eliminate if a path_keyword isn't in the path at all
+        if ! in_path { return -5555 }
     }
 
     score
