@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use query::QueryOptions;
 use serde::{Deserialize, Serialize};
 
 pub mod query;
@@ -13,7 +12,6 @@ pub enum IpcCommand {
     Quit,
     Reload,
     GetIndex(Option<PathBuf>),
-    QueryIndex(QueryOptions),
 }
 
 #[derive(Deserialize, Serialize)]
@@ -29,13 +27,6 @@ pub struct IndexEntry {
     pub directory: bool,
 }
 
-pub mod helper {
-    use std::path::{Path, PathBuf};
-    pub fn merge_paths(path1: &Path, path2: &Path) -> PathBuf {
-        return path1.iter().chain(path2.iter()).collect();
-    }
-}
-
 #[cfg(feature = "util")]
 pub mod util {
     use std::{
@@ -45,8 +36,6 @@ pub mod util {
         os::unix::net::UnixStream,
         path::PathBuf,
     };
-
-    use crate::query::QueryOptions;
 
     use super::{IndexEntry, IpcCommand, IpcResponse, DEFAULT_SOCKET};
 
@@ -96,13 +85,6 @@ pub mod util {
         stream.read_to_end(&mut buf)?;
 
         Ok(serde_json::from_slice(&buf)?)
-    }
-
-    pub fn query_index(query_opts: QueryOptions) -> Result<Vec<IndexEntry>, Error> {
-        match fetch(&IpcCommand::QueryIndex(query_opts))? {
-            IpcResponse::Index(index) => Ok(index),
-            _ => Err(Error::Unknown),
-        }
     }
 
     pub fn get_index(path: Option<PathBuf>) -> Result<Vec<IndexEntry>, Error> {

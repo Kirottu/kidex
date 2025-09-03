@@ -4,7 +4,7 @@ use futures::StreamExt;
 use globber::Pattern;
 use index::{GetPath, Index};
 use inotify::{EventMask, Inotify, WatchDescriptor};
-use kidex_common::{helper::merge_paths, IndexEntry, IpcCommand, IpcResponse, DEFAULT_SOCKET};
+use kidex_common::{IndexEntry, IpcCommand, IpcResponse, DEFAULT_SOCKET};
 use serde::{de::Error, Deserialize, Deserializer};
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook_tokio::Signals;
@@ -18,7 +18,6 @@ use tokio::{
 };
 
 mod index;
-mod query;
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -291,7 +290,7 @@ async fn ipc_task(
                                             let parent_path = index.inner.get_path(&desc);
                                             dir.children.into_iter().map(move |(path, child)|
                                                 IndexEntry {
-                                                    path: merge_paths(&parent_path, &path),
+                                                    path: parent_path.iter().chain(path.iter()).collect(),
                                                     directory: matches!(child, ChildIndex::Directory {..})
                                                 }
                                             )
@@ -306,7 +305,7 @@ async fn ipc_task(
                                     let parent_path = index.inner.get_path(desc);
                                     dir.children.iter().map(move |(path, child)|
                                         IndexEntry {
-                                            path: merge_paths(&parent_path, &path),
+                                            path: parent_path.clone().iter().chain(path.iter()).collect(),
                                             directory: matches!(child, ChildIndex::Directory {..}),
                                         })
                                 })
@@ -318,14 +317,6 @@ async fn ipc_task(
                             Some(paths) => IpcResponse::Index(paths),
                             None => IpcResponse::NotFound,
                         }).unwrap();
-
-                        stream.write_all(&buf).await.unwrap();
-                    }
-                    IpcCommand::QueryIndex(query) => {
-                        let index = index.lock().await;
-                        let results = query::query(&index, &query);
-
-                        let buf = serde_json::to_vec(&IpcResponse::Index(results)).unwrap();
 
                         stream.write_all(&buf).await.unwrap();
                     },

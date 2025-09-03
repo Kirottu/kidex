@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use kidex_common::{util::{get_index, query_index, regenerate_index, reload_config, shutdown_server}, IndexEntry, query::*};
+use kidex_common::{util::{get_index, regenerate_index, reload_config, shutdown_server}, IndexEntry, query::*};
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -17,8 +17,6 @@ enum Command {
     RegenerateIndex,
     /// Return the entire index
     GetIndex { path: Option<PathBuf> },
-    /// Queries the kidex daemon to return filtered results
-    Query { args: Vec<String> },
     /// Get the index and filters the results
     Find {
         // TODO: Add some CLI arguments:
@@ -122,17 +120,6 @@ fn main() {
         }
         Command::GetIndex { path } => {
             let index = get_index(path).exit_on_err("Failed to get index");
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&index).exit_on_err("Failed to serialize data")
-            );
-        }
-        Command::Query { args } => {
-            // TODO: Benchmark backend quering and/or move it as a setting to the find command
-            let query = Query::from_query_elements(args);
-            let opts = QueryOptions { query, ..Default::default()};
-
-            let index = query_index(opts).exit_on_err("Failed to query index");
             println!(
                 "{}",
                 serde_json::to_string_pretty(&index).exit_on_err("Failed to serialize data")

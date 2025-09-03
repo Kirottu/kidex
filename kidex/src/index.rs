@@ -8,7 +8,6 @@ use std::{
 };
 
 use inotify::{Event, Inotify, WatchDescriptor, WatchMask};
-use kidex_common::helper::merge_paths;
 
 use crate::{ChildIndex, Config, DirectoryIndex, WatchDir};
 
@@ -61,7 +60,12 @@ impl Index {
 
     /// Index creation for events where a file is "created"
     pub fn create_index(&mut self, inotify: &mut Inotify, path: &PathBuf, event: &Event<&OsStr>) {
-        let full_path = merge_paths(&self.inner.get_path(&event.wd), &path);
+        let full_path = self
+            .inner
+            .get_path(&event.wd)
+            .iter()
+            .chain(path.iter())
+            .collect::<PathBuf>();
 
         if self
             .inner
@@ -191,7 +195,11 @@ impl Index {
         parent: Option<WatchDescriptor>,
     ) -> io::Result<Option<(ChildIndex, HashMap<WatchDescriptor, DirectoryIndex>)>> {
         let full_path = match &parent {
-            Some(parent) => merge_paths(&self.inner.get_path(parent), &path),
+            Some(parent) => {
+                let mut new_path = self.inner.get_path(parent);
+                new_path.extend(path.iter());
+                new_path
+            }
             None => path.clone(),
         };
 
@@ -231,7 +239,11 @@ impl Index {
                 .iter()
                 .any(|pat| pat.matches(&path.to_string_lossy()))
             {
-                let full_path = merge_paths(&index.get_path(&desc), &path);
+                let full_path = index
+                    .get_path(&desc)
+                    .iter()
+                    .chain(path.iter())
+                    .collect::<PathBuf>();
                 let file_type = match entry.file_type() {
                     Ok(file_type) => file_type,
                     Err(why) => {
