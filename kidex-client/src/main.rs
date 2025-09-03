@@ -25,7 +25,14 @@ enum Command {
         // --root <path>
         // --mode <mode> | --regex | --literal | --smart (default)
 
-        #[arg(long, group = "filetype")]
+        /// Case-insensitive search (default: smart-case)
+        #[arg(short, long, group = "case")]
+        ignore_case: bool,
+        /// Case-sensitive search (default: smart-case)
+        #[arg(short = 's', long, group = "case")]
+        case_sensitive: bool,
+
+        #[arg(short, long, group = "filetype")]
         r#type: Option<ClapFileType>,
         #[arg(short, long, group = "filetype")]
         dirs_only: bool,
@@ -131,7 +138,11 @@ fn main() {
                 serde_json::to_string_pretty(&index).exit_on_err("Failed to serialize data")
             );
         }
-        Command::Find { args, limit, r#type, dirs_only, files_only, output_format } => {
+        Command::Find {
+            args, limit, output_format,
+            r#type, dirs_only, files_only,
+            ignore_case, case_sensitive,
+        } => {
             let mut query = Query::from_query_elements(args);
 
             // Override query settings
@@ -147,6 +158,13 @@ fn main() {
             }
             if files_only {
                 query.file_type = FileType::FilesOnly;
+            }
+
+            if ignore_case {
+                query.case_option = CaseOption::Ignore;
+            }
+            if case_sensitive {
+                query.case_option = CaseOption::Match;
             }
 
             let opts = QueryOptions { query, limit, ..Default::default()};

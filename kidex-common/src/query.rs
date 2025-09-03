@@ -2,6 +2,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+pub enum CaseOption {
+    Match,
+    Ignore,
+    Smart,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum OutputFormat {
     Json,
     List,
@@ -23,17 +30,48 @@ impl Keyword {
     pub fn new(word: &str, exact_match: bool) -> Self {
         Keyword {
             exact_match,
-            word: word.to_lowercase()
+            word: word
                 .trim()
                 .trim_matches('/')
                 .to_string(),
-            // TODO: Add case_sensitivity
         }
     }
 
-    pub fn is_in(&self, candidate: &str) -> bool {
-        if self.exact_match { candidate.to_lowercase() == self.word }
-        else { candidate.to_lowercase().contains(&self.word) }
+    pub fn is_at_beginning(&self, candidate: &str, case_options: &CaseOption) -> bool {
+        match case_options {
+            CaseOption::Match => candidate.starts_with(&self.word),
+            CaseOption::Ignore => candidate.to_lowercase().starts_with(&self.word.to_lowercase()),
+            CaseOption::Smart => {
+                if &self.word.to_lowercase() != &self.word {
+                    // Case sensitive
+                    candidate.starts_with(&self.word)
+                } else {
+                    // Ignoring case
+                    candidate.to_lowercase().starts_with(&self.word.to_lowercase())
+                }
+            }
+        }
+    }
+
+    pub fn is_in(&self, candidate: &str, case_options: &CaseOption) -> bool {
+        let (cased_candidate, cased_word) = match case_options {
+            CaseOption::Match => (candidate.into(), &self.word),
+            CaseOption::Ignore => (candidate.to_lowercase(), &self.word.to_lowercase()),
+            CaseOption::Smart => {
+                if &self.word.to_lowercase() != &self.word {
+                    // Case sensitive
+                    (candidate.into(), &self.word)
+                } else {
+                    // Ignoring case
+                    (candidate.to_lowercase(), &self.word.to_lowercase())
+                }
+            },
+        };
+        if self.exact_match {
+            cased_candidate == *cased_word
+        } else {
+            cased_candidate.contains(cased_word)
+        }
     }
 }
 
@@ -43,6 +81,7 @@ pub struct Query {
     pub direct_parent: Option<Keyword>,
     pub keywords: Vec<Keyword>,
     pub path_keywords: Vec<Keyword>,
+    pub case_option: CaseOption,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -60,6 +99,7 @@ impl Default for Query {
             direct_parent: None,
             keywords: vec![],
             path_keywords: vec![],
+            case_option: CaseOption::Smart,
         }
     }
 }
@@ -109,6 +149,7 @@ impl Query {
     }
 }
 
+/// Applies a Query to a single item to calculate a score.
 pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
     let basename  = path.file_name().unwrap_or_default().to_string_lossy();
     let mut score: i64 = 0;
@@ -127,7 +168,7 @@ pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
             .and_then(|p| p.file_name())
             .and_then(|p| p.to_str())
             .unwrap_or("");
-        if parent_dir.is_in(parent_path_name) {
+        if parent_dir.is_in(parent_path_name, &query.case_option) {
             score += 1;
         } else {
             return -9999;
@@ -136,9 +177,9 @@ pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
 
     // Check if all the keywords are in the basename
     for kw in &query.keywords {
-        score += if ! kw.exact_match && basename.starts_with(&kw.word) {
+        score += if ! kw.exact_match && kw.is_at_beginning(&basename, &query.case_option) {
             50
-        } else if kw.is_in(&basename) {
+        } else if kw.is_in(&basename, &query.case_option) {
             10
         } else {
             -2000
@@ -152,7 +193,7 @@ pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
         let mut backdepth = 20;
         for dc in path.components().rev().skip(1) {
             let dir_component = dc.as_os_str().to_string_lossy();
-            if pkw.is_in(&dir_component) {
+            if pkw.is_in(&dir_component, &query.case_option) {
                 in_path = true;
                 score+=backdepth;
             }
