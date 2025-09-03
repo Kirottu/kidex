@@ -32,7 +32,7 @@ enum Command {
         #[arg(short, long, group = "filetype")]
         files_only: bool,
 
-        /// Set how dats should be printed
+        /// How data should be printed
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Json)]
         output_format: OutputFormat,
 
@@ -53,8 +53,8 @@ pub enum OutputFormat {
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ClapFileType {
     All,
-    FilesOnly,
-    DirOnly,
+    Files,
+    Dirs,
 }
 
 trait ExitWithError<T> {
@@ -121,6 +121,7 @@ fn main() {
             );
         }
         Command::Query { args } => {
+            // TODO: Benchmark backend quering and/or move it as a setting to the find command
             let query = Query::from_query_elements(args);
             let opts = QueryOptions { query, ..Default::default()};
 
@@ -131,27 +132,30 @@ fn main() {
             );
         }
         Command::Find { args, limit, r#type, dirs_only, files_only, output_format } => {
-            let mut file_type = if let Some(t) = r#type {
-                match t {
+            let mut query = Query::from_query_elements(args);
+
+            // Override query settings
+            if let Some(t) = r#type {
+                query.file_type = match t {
                     ClapFileType::All => FileType::All,
-                    ClapFileType::FilesOnly => FileType::FilesOnly,
-                    ClapFileType::DirOnly => FileType::DirOnly,
+                    ClapFileType::Files => FileType::FilesOnly,
+                    ClapFileType::Dirs => FileType::DirOnly,
                 }
-            } else { FileType::All };
+            }
             if dirs_only {
-                file_type = FileType::DirOnly;
+                query.file_type = FileType::DirOnly;
             }
             if files_only {
-                file_type = FileType::FilesOnly;
+                query.file_type = FileType::FilesOnly;
             }
 
-            let mut query = Query::from_query_elements(args);
-            query.file_type = file_type;
             let opts = QueryOptions { query, limit, ..Default::default()};
             log::info!("{:?}", opts);
 
             let index = get_index(None).exit_on_err("Failed to get index");
             let filtered = filter(index, &opts);
+
+            // Print results
             match output_format {
                 OutputFormat::Json => {
                     println!(

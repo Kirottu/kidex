@@ -75,10 +75,14 @@ impl Default for QueryOptions {
 }
 
 impl Query {
-    // Takes the elements of the query string
+    // Basically a split-by-whitespace
     pub fn from_query_string(s: &str) -> Self {
         Query::from_query_elements(s.split_whitespace().collect())
     }
+
+    /// Parses the arguments to refine the query.
+    /// This includes the special syntax to search only directorys or only files,\
+    /// and if a keyword should be matched against the basename or the path.
     pub fn from_query_elements<T: AsRef<str>>(args: Vec<T>) -> Self {
         let mut query = Query::default();
         for arg in args {
@@ -101,7 +105,6 @@ impl Query {
                 query.keywords.push(keyword);
             }
         }
-        
         query
     }
 }
