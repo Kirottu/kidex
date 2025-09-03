@@ -32,12 +32,22 @@ enum Command {
         #[arg(short, long, group = "filetype")]
         files_only: bool,
 
+        /// Set how dats should be printed
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Json)]
+        output_format: OutputFormat,
+
         /// Return only the <N> best matches
         #[arg(short, long, value_name = "N")]
         limit: Option<usize>,
         ///
         args: Vec<String>
     },
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum OutputFormat {
+    Json,
+    List,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -87,6 +97,7 @@ pub fn filter(index: Vec<IndexEntry>, query_opts: &QueryOptions) -> Vec<IndexEnt
 
 
 fn main() {
+    env_logger::init();
     let opts = Opts::parse();
 
     match opts.subcommand {
@@ -119,7 +130,7 @@ fn main() {
                 serde_json::to_string_pretty(&index).exit_on_err("Failed to serialize data")
             );
         }
-        Command::Find { args, limit, r#type, dirs_only, files_only } => {
+        Command::Find { args, limit, r#type, dirs_only, files_only, output_format } => {
             let mut file_type = if let Some(t) = r#type {
                 match t {
                     ClapFileType::All => FileType::All,
@@ -137,14 +148,26 @@ fn main() {
             let mut query = Query::from_query_elements(args);
             query.file_type = file_type;
             let opts = QueryOptions { query, limit, ..Default::default()};
-            println!("{:?}", opts);
+            log::info!("{:?}", opts);
 
             let index = get_index(None).exit_on_err("Failed to get index");
             let filtered = filter(index, &opts);
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&filtered).exit_on_err("Failed to serialize data")
-            );
+            match output_format {
+                OutputFormat::Json => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&filtered).exit_on_err("Failed to serialize data")
+                    );
+                },
+                OutputFormat::List => {
+                    for f in filtered {
+                        println!("{}{}",
+                            f.path.to_string_lossy(),
+                            if f.directory {"/"} else {""}
+                        )
+                    }
+                },
+            }
         }
     }
 }

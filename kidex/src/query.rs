@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use kidex_common::{helper::merge_paths, query::{calc_score, QueryOptions}, IndexEntry};
 use crate::{index::{GetPath, Index}, ChildIndex};
 
