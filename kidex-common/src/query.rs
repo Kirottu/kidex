@@ -102,8 +102,6 @@ impl Query {
             }
         }
         
-        log::error!("{:?}", query);
-        println!("{:?}", query);
         query
     }
 }
@@ -165,3 +163,30 @@ pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
     score
 }
 
+/// Picks the top <limit> elements from a list of scored entries.
+/// The top entry will come first
+pub fn pick_top_entries<T: Clone>(mut vec: Vec<(i64, T)>, limit: usize) -> Vec<(i64, T)> {
+    // If the vec is shorter than the limit, just sort it high to low
+    if vec.len() <= limit {
+        vec.sort_by_key(|(s, _)| *s);
+        vec.reverse();
+        return vec;
+    }
+    /* Note: Make sure this sorting algorithm is 'stable' like the sort_by_key algorithm */
+    // Pick the top n most highest ranked entries
+    let mut top: Vec<(i64, T)> = Vec::new();
+    for (score, entry) in vec {
+        // Ignore score if it's worse than the worst one so far
+        let worst = top.get(limit-1).map_or(i64::MIN, |f| f.0);
+        if score < worst {
+            continue;
+        }
+        let index = top.partition_point(|&(i, _)| i > score);
+        top.insert(index, (score, entry.to_owned()));
+    }
+    // Cut 
+    if top.len() > limit {
+        top = top.drain(..limit).collect()
+    }
+    top
+}

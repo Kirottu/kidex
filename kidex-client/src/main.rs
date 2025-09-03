@@ -77,30 +77,9 @@ pub fn filter(index: Vec<IndexEntry>, query_opts: &QueryOptions) -> Vec<IndexEnt
         .collect();
 
     if let Some(limit) = query_opts.limit {
-        if filtered.len() <= limit {
-            // Result amount is below the limit, just sort it then
-            filtered.sort_by_key(|(s, _)| *s);
-        } else {
-            // Pick the top n most highest ranked entries
-            let mut top: Vec<(i64, IndexEntry)> = Vec::new();
-            for (scr, entry) in filtered {
-                // Ignore score if it's worse than the worst one so far
-                let worst = top.get(limit).map_or(0i64, |f| f.0);
-                if top.len() >= limit && scr <= worst {
-                    continue;
-                }
-                let index = top.partition_point(|&(i, _)| i >= scr);
-                top.insert(index, (scr, entry.to_owned()));
-            }
-            // Cut 
-            if top.len() > limit {
-                top = top[..limit].to_vec()
-            }
-            top.reverse();
-            filtered = top;
-        }
+        filtered = pick_top_entries(filtered, limit);
+        filtered.reverse();
     } else {
-        // Biggest score last!
         filtered.sort_by_key(|(s, _)| *s);
     }
     filtered.into_iter().map(|p| p.1).collect()
@@ -141,17 +120,24 @@ fn main() {
             );
         }
         Command::Find { args, limit, r#type, dirs_only, files_only } => {
-            let file_type = if let Some(t) = r#type {
+            let mut file_type = if let Some(t) = r#type {
                 match t {
                     ClapFileType::All => FileType::All,
                     ClapFileType::FilesOnly => FileType::FilesOnly,
                     ClapFileType::DirOnly => FileType::DirOnly,
                 }
             } else { FileType::All };
+            if dirs_only {
+                file_type = FileType::DirOnly;
+            }
+            if files_only {
+                file_type = FileType::FilesOnly;
+            }
 
             let mut query = Query::from_query_elements(args);
             query.file_type = file_type;
             let opts = QueryOptions { query, limit, ..Default::default()};
+            println!("{:?}", opts);
 
             let index = get_index(None).exit_on_err("Failed to get index");
             let filtered = filter(index, &opts);
