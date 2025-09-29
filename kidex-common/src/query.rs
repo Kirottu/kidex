@@ -75,6 +75,10 @@ impl Keyword {
     }
 }
 
+pub enum QueryParameter {
+
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Query {
     pub file_type: FileType,
@@ -141,67 +145,68 @@ impl Query {
         }
         query
     }
-}
 
-/// Applies a Query to a path candidate to calculate a score.
-pub fn calc_score(query: &Query, path: &Path, is_dir: bool) -> i64 {
-    let basename  = path.file_name().unwrap_or_default().to_string_lossy();
-    let mut score: i64 = 0;
+    /// Applies a Query to a path candidate to calculate a score.
+    pub fn calc_score(&self, path: &Path, is_dir: bool) -> i64 {
+        let basename  = path.file_name().unwrap_or_default().to_string_lossy();
+        let mut score: i64 = 0;
 
-    // Eliminate when filetype mismatches
-    match query.file_type {
-        FileType::FilesOnly if is_dir => return -8888,
-        FileType::DirOnly if ! is_dir => return -8888,
-        _ => (),
-    };
+        // Eliminate when filetype mismatches
+        match self.file_type {
+            FileType::FilesOnly if is_dir => return -8888,
+            FileType::DirOnly if ! is_dir => return -8888,
+            _ => (),
+        };
 
-    // When set, check if the direct parent of the file matches
-    if let Some(parent_dir) = &query.direct_parent {
-        let parent_path_name = path
-            .parent()
-            .and_then(|p| p.file_name())
-            .and_then(|p| p.to_str())
-            .unwrap_or("");
-        if parent_dir.is_in(parent_path_name, &query.case_option) {
-            score += 1;
-        } else {
-            // Eliminate if parent directory does not match
-            return -9999;
-        }
-    }
-
-    // Check if all the keywords are in the basename
-    for kw in &query.keywords {
-        score += if ! kw.exact_match && kw.is_at_beginning(&basename, &query.case_option) {
-            50
-        } else if kw.is_in(&basename, &query.case_option) {
-            10
-        } else {
-            // Eliminate if a keyword misses in the basename
-            return -2222
-        }
-    }
-
-    // Check if all the path keywords match any of the path components
-    for pkw in &query.path_keywords {
-        let mut in_path = false;
-        let mut backdepth = 20;
-        // Check if a path keyword matches any of the path components
-        // Deeper directories give greater score
-        for dc in path.components().rev().skip(1) {
-            let dir_component = dc.as_os_str().to_string_lossy();
-            if pkw.is_in(&dir_component, &query.case_option) {
-                in_path = true;
-                score+=backdepth;
+        // When set, check if the direct parent of the file matches
+        if let Some(parent_dir) = &self.direct_parent {
+            let parent_path_name = path
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|p| p.to_str())
+                .unwrap_or("");
+            if parent_dir.is_in(parent_path_name, &self.case_option) {
+                score += 1;
+            } else {
+                // Eliminate if parent directory does not match
+                return -9999;
             }
-            backdepth -= 4;
         }
-        // Eliminate if a path_keyword isn't in the path at all
-        if ! in_path { return -5555 }
-    }
 
-    score
+        // Check if all the keywords are in the basename
+        for kw in &self.keywords {
+            score += if ! kw.exact_match && kw.is_at_beginning(&basename, &self.case_option) {
+                50
+            } else if kw.is_in(&basename, &self.case_option) {
+                10
+            } else {
+                // Eliminate if a keyword misses in the basename
+                return -2222
+            }
+        }
+
+        // Check if all the path keywords match any of the path components
+        for pkw in &self.path_keywords {
+            let mut in_path = false;
+            let mut backdepth = 20;
+            // Check if a path keyword matches any of the path components
+            // Deeper directories give greater score
+            for dc in path.components().rev().skip(1) {
+                let dir_component = dc.as_os_str().to_string_lossy();
+                if pkw.is_in(&dir_component, &self.case_option) {
+                    in_path = true;
+                    score+=backdepth;
+                }
+                backdepth -= 4;
+            }
+            // Eliminate if a path_keyword isn't in the path at all
+            if ! in_path { return -5555 }
+        }
+
+        score
+    }
 }
+
 
 /// Picks the top <limit> elements from a list of scored entries.
 /// The top entry will come first

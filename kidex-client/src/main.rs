@@ -86,7 +86,7 @@ pub fn filter(index: Vec<IndexEntry>, query_opts: &QueryOptions) -> Vec<IndexEnt
     let mut filtered: Vec<(i64,IndexEntry)> = index
         .into_iter()
         .filter_map(|entry| {
-            let score = calc_score(&query_opts.query, &entry.path, entry.directory);
+            let score = query_opts.query.calc_score(&entry.path, entry.directory);
             if score > 0 { Some((score, entry)) } else { None }
         })
         .collect();
