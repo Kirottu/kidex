@@ -130,21 +130,24 @@ fn main() {
             r#type, dirs_only, files_only,
             ignore_case, case_sensitive,
         } => {
-            let mut query = Query::from_query_elements(args);
+            let mut query = Query::default();
+            for arg in args {
+                query.add_parameter(QueryParameter::from_str(&arg));
+            }
 
             // Override query settings
             if let Some(t) = r#type {
-                query.file_type = match t {
+                query.add_parameter(QueryParameter::Type(match t {
                     ClapFileType::All => FileType::All,
                     ClapFileType::Files => FileType::FilesOnly,
                     ClapFileType::Dirs => FileType::DirOnly,
-                }
+                }));
             }
             if dirs_only {
-                query.file_type = FileType::DirOnly;
+                query.add_parameter(QueryParameter::Type(FileType::DirOnly));
             }
             if files_only {
-                query.file_type = FileType::FilesOnly;
+                query.add_parameter(QueryParameter::Type(FileType::FilesOnly));
             }
 
             if ignore_case {

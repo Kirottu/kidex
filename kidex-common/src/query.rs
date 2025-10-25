@@ -75,25 +75,29 @@ impl Keyword {
     }
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum QueryParameter {
-
+    // Filters by a specific filetype, like directories-only
+    Type(FileType),
+    // Matching the basename
+    Keyword(Keyword),
+    // Matching any path element
+    PathKeyword(Keyword),
+    // Matching only the direct parent directory
+    DirectParent(Keyword),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Query {
-    pub file_type: FileType,
-    pub direct_parent: Option<Keyword>,
-    pub keywords: Vec<Keyword>,
-    pub path_keywords: Vec<Keyword>,
+    parameters: Vec<QueryParameter>,
     pub case_option: CaseOption,
+
 }
+
 impl Default for Query {
     fn default() -> Self {
-        Query {
-            file_type: FileType::All,
-            direct_parent: None,
-            keywords: vec![],
-            path_keywords: vec![],
+        Query{
+            parameters: vec![],
             case_option: CaseOption::Smart,
         }
     }
@@ -117,33 +121,45 @@ impl Default for QueryOptions {
     }
 }
 
-impl Query {
-    /// Parses the arguments to refine the query.
-    /// This includes the special syntax to search only directorys or only files,\
-    /// and if a keyword should be matched against the basename or the path.
-    pub fn from_query_elements<T: AsRef<str>>(args: Vec<T>) -> Self {
-        let mut query = Query::default();
-        for arg in args {
-            let arg = arg.as_ref();
-            let keyword = Keyword::new(arg, arg.ends_with("/"));
-
-            if arg == "/" {
-                query.file_type = FileType::DirOnly;
-            }
-            else if arg == "f/" {
-                query.file_type = FileType::FilesOnly;
-            }
-            else if arg.starts_with("//") {
-                query.direct_parent = Some(keyword);
-            }
-            else if arg.starts_with("/") {
-                query.path_keywords.push(keyword);
-            }
-            else {
-                query.keywords.push(keyword);
-            }
+impl QueryParameter {
+    /// Parses a string into a query parameter
+    /// Syntax:
+    /// <word>   : match the word in the basename
+    /// /<word>  : match the word in the full path, but not the basename
+    /// //<word> : match the word in the direct parent directory
+    /// <word>/  : match a keyword exactly and not just partly
+    ///
+    pub fn from_str(s: &str) -> QueryParameter {
+        let keyword = Keyword::new(s, s.ends_with("/"));
+        if s == "/" {
+            return QueryParameter::Type(FileType::DirOnly);
         }
-        query
+        else if s == "f/" {
+            return QueryParameter::Type(FileType::FilesOnly);
+        }
+        else if s.starts_with("//") {
+            return QueryParameter::DirectParent(keyword);
+        }
+        else if s.starts_with("/") {
+            return QueryParameter::PathKeyword(keyword);
+        }
+        else {
+            return QueryParameter::Keyword(keyword);
+        }
+    }
+}
+
+impl Query {
+     
+    /// Appends a parameter to the Query. 
+    /// If a parameter is of any of the following types, it replaces previous parameters of that type:
+    /// - [`QueryParameter::Type`]
+    pub fn add_parameter(&mut self, param: QueryParameter) {
+        // Replace previous type parameters
+        if matches!(param, QueryParameter::Type(_)) {
+            self.parameters.retain(|p| { ! matches!(p, QueryParameter::Type(_)) });
+        };
+        self.parameters.push(param);
     }
 
     /// Applies a Query to a path candidate to calculate a score.
@@ -151,56 +167,59 @@ impl Query {
         let basename  = path.file_name().unwrap_or_default().to_string_lossy();
         let mut score: i64 = 0;
 
-        // Eliminate when filetype mismatches
-        match self.file_type {
-            FileType::FilesOnly if is_dir => return -8888,
-            FileType::DirOnly if ! is_dir => return -8888,
-            _ => (),
-        };
-
-        // When set, check if the direct parent of the file matches
-        if let Some(parent_dir) = &self.direct_parent {
-            let parent_path_name = path
-                .parent()
-                .and_then(|p| p.file_name())
-                .and_then(|p| p.to_str())
-                .unwrap_or("");
-            if parent_dir.is_in(parent_path_name, &self.case_option) {
-                score += 1;
-            } else {
-                // Eliminate if parent directory does not match
-                return -9999;
+        for param in &self.parameters {
+            match param {
+                QueryParameter::Type(file_type) => {
+                    // Eliminate when filetype mismatches
+                    match file_type {
+                        FileType::FilesOnly if is_dir => return -8888,
+                        FileType::DirOnly if ! is_dir => return -8888,
+                        _ => (),
+                    };
+                },
+                QueryParameter::Keyword(keyword) => {
+                    // Check if all the keywords are in the basename
+                    score += if ! keyword.exact_match && keyword.is_at_beginning(&basename, &self.case_option) {
+                        50
+                    } else if keyword.is_in(&basename, &self.case_option) {
+                        10
+                    } else {
+                        // Eliminate if a keyword misses in the basename
+                        return -2222
+                    }
+                },
+                QueryParameter::PathKeyword(keyword) =>{
+                    // Check if all the path keywords match any of the path components
+                    let mut in_path = false;
+                    let mut backdepth = 20;
+                    // Check if a path keyword matches any of the path components
+                    // Deeper directories give greater score
+                    for dc in path.components().rev().skip(1) {
+                        let dir_component = dc.as_os_str().to_string_lossy();
+                        if keyword.is_in(&dir_component, &self.case_option) {
+                            in_path = true;
+                            score+=backdepth;
+                        }
+                        backdepth -= 4;
+                    }
+                    // Eliminate if a path_keyword isn't in the path at all
+                    if ! in_path { return -5555 }
+                },
+                QueryParameter::DirectParent(keyword) => {
+                    // When set, check if the direct parent of the file matches
+                    let parent_path_name = path
+                        .parent()
+                        .and_then(|p| p.file_name())
+                        .and_then(|p| p.to_str())
+                        .unwrap_or("");
+                    if keyword.is_in(parent_path_name, &self.case_option) {
+                        score += 1;
+                    } else {
+                        // Eliminate if parent directory does not match
+                        return -9999;
+                    }
+                },
             }
-        }
-
-        // Check if all the keywords are in the basename
-        for kw in &self.keywords {
-            score += if ! kw.exact_match && kw.is_at_beginning(&basename, &self.case_option) {
-                50
-            } else if kw.is_in(&basename, &self.case_option) {
-                10
-            } else {
-                // Eliminate if a keyword misses in the basename
-                return -2222
-            }
-        }
-
-        // Check if all the path keywords match any of the path components
-        for pkw in &self.path_keywords {
-            let mut in_path = false;
-            let mut backdepth = 20;
-            // Check if a path keyword matches any of the path components
-            // Deeper directories give greater score
-            for dc in path.components().rev().skip(1) {
-                let dir_component = dc.as_os_str().to_string_lossy();
-                if pkw.is_in(&dir_component, &self.case_option) {
-                    in_path = true;
-                    score+=backdepth;
-                }
-                backdepth -= 4;
-            }
-            // Eliminate if a path_keyword isn't in the path at all
-            if ! in_path { return -5555 }
         }
 
         score
