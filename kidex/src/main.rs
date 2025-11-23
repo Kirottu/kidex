@@ -97,16 +97,19 @@ enum EventLoopMsg {
 async fn main() {
     env_logger::init();
 
-    let config_path = format!(
-        "{}/.config/kidex.ron",
-        match env::var("HOME") {
-            Ok(home) => home,
-            Err(why) => {
-                log::error!("Failed to determine home directory: {}", why);
-                return;
+    let config_path = env::var("XDG_CONFIG_HOME")
+        .map(|config_home| format!("{config_home}/kidex.ron"))
+        .unwrap_or(format!(
+            "{}/.config/kidex.ron",
+            match env::var("HOME") {
+                Ok(home) => home,
+                Err(why) => {
+                    log::error!("Failed to determine home directory: {}", why);
+                    return;
+                }
             }
-        }
-    );
+        ));
+
     let mut inotify = Inotify::init().expect("Failed to init inotify");
     let mut config: Config = ron::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
     let mut index = Index::new();
@@ -283,7 +286,7 @@ async fn ipc_task(
                                 index
                                     .inner
                                     .iter()
-                                    .find(|(desc, _)| index.inner.get_path(&desc) == path) 
+                                    .find(|(desc, _)| index.inner.get_path(&desc) == path)
                                     .map(|(desc, _)| index.traverse(desc.clone())
                                         .into_iter()
                                         .flat_map(|(desc, dir)| {
