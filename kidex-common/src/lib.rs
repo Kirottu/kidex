@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+pub mod query;
+
 pub const DEFAULT_SOCKET: &str = "/tmp/kidex.sock";
 
 #[derive(Deserialize, Serialize)]
@@ -73,7 +75,6 @@ pub mod util {
     fn fetch(command: &IpcCommand) -> Result<IpcResponse, Error> {
         let mut stream =
             UnixStream::connect(env::var("SOCKET_PATH").unwrap_or(DEFAULT_SOCKET.to_string()))?;
-
         let mut buf = serde_json::to_vec(command).unwrap();
         buf.push(0x0);
 
